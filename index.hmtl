@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Playlist Condivisa – Pool Party</title>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 24px; background: #f9f9f9; }
+    h1 { margin-bottom: 4px; }
+    .muted { color: #666; font-size: 14px; margin-bottom: 16px; }
+    input, button { padding: 8px 10px; font-size: 15px; }
+    input[type="text"] { width: 100%; max-width: 420px; }
+    button { cursor: pointer; border: 1px solid #ccc; background: #fff; border-radius: 6px; }
+    button:hover { background: #f0f0f0; }
+    .card { background: #fff; border-radius: 8px; padding: 16px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+    .track { display: grid; grid-template-columns: 56px 1fr auto; gap: 12px; align-items: center; padding: 8px 0; border-bottom: 1px solid #eee; }
+    .track:last-child { border-bottom: none; }
+    .cover { width: 56px; height: 56px; border-radius: 8px; object-fit: cover; background: #f3f3f3; }
+    .t-title { font-weight: 600; }
+    .t-artist { color: #444; font-size: 14px; }
+    .pill { font-size: 11px; padding: 2px 6px; border-radius: 999px; background: #eee; margin-left: 6px; }
+  </style>
+</head>
+<body>
+  <h1>Playlist Condivisa</h1>
+  <div class="muted">Pool Party – aggiungi i tuoi brani preferiti 🎶</div>
+
+  <div class="card">
+    <h3>🔎 Cerca brani</h3>
+    <input id="q" type="text" placeholder="Cerca titolo o artista..." />
+    <input id="yourname" type="text" placeholder="Il tuo nome (facoltativo)" style="margin-top:8px;" />
+    <div style="margin-top:8px;">
+      <button id="btnSearch">Cerca</button>
+    </div>
+    <div id="results"></div>
+  </div>
+
+  <div class="card">
+    <h3>🎵 Tracce aggiunte <span id="count">0</span></h3>
+    <div class="muted">Si aggiorna in tempo reale</div>
+    <div id="tracks"></div>
+    <div style="margin-top:12px;">
+      <button id="btnExport">⬇️ Esporta CSV</button>
+    </div>
+  </div>
+
+  <!-- Firebase (modular) -->
+  <script type="module">
+    // === Firebase config (il tuo) ===
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-app.js";
+    import { getFirestore, collection, addDoc, query, orderBy, onSnapshot, getDocs } 
+      from "https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyDdBiAvXAQS3yUiZYNGj57jnEeeNRazrqo",
+      authDomain: "poolparty-83cea.firebaseapp.com",
+      projectId: "poolparty-83cea",
+      storageBucket: "poolparty-83cea.firebasestorage.app",
+      messagingSenderId: "605872630758",
+      appId: "1:605872630758:web:fd08ae3060dd1f28268427"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+
+    const PLAYLIST_ID = "poolparty"; // ID playlist (puoi cambiarlo)
+
+    // === Ricerca brani con iTunes ===
+    async function searchITunes(q) {
+      const url = `https://itunes.apple.com/search?term=${encodeURIComponent(q)}&entity=song&limit=20`;
+      const res = await fetch(url);
+      const data = await res.json();
+      return data.results.map(r => ({
+        title: r.trackName,
+        artist: r.artistName,
+        album: r.collectionName,
+        duration_ms: r.trackTimeMillis || null,
+        artworkUrl: (r.artworkUrl100 || "").replace("100x100","300x300"),
+        itunesId: String(r.trackId),
+        isrc: r.isrc || null
+      }));
+    }
+
+    function renderResults(list) {
+      const el = document.getElementById("results");
+      el.innerHTML = "";
+      if (!list.length) { el.innerHTML = "<div class='muted'>Nessun risultato</div>"; return; }
+      list.forEach(t => {
+        const row = document.createElement("div");
+        row.className = "track";
+        row.innerHTML = `
+          <img class="cover" src="${t.artworkUrl || ''}" />
+          <div>
+            <div class="t-title">${t.title}</div>
+            <div class="t-artist">${t.artist}</div>
+          </div>
+          <div><button>Aggiungi</button></div>
+        `;
+        row.querySelector("button").onclick = () => addTrack(t);
+        el.appendChild(row);
+      });
+    }
+
+    async function addTrack(t) {
+      const addedBy = document.getElementById("yourname").value.trim() || "ospite";
+      await addDoc(collection(db, "playlists", PLAYLIST_ID, "tracks"), {
+        title: t.title,
+        artist: t.artist,
+        album: t.album || null,
+        duration_ms: t.duration_ms || null,
+        isrc: t.isrc || null,
+        artworkUrl: t.artworkUrl || null,
+        itunesId: t.itunesId || null,
+        addedBy,
+        addedAt: new Date()
+      });
+    }
+
+    // === Lista realtime ===
+    function listenTracks() {
+      const qTracks = query(collection(db, "playlists", PLAYLIST_ID, "tracks"), orderBy("addedAt", "asc"));
+      onSnapshot(qTracks, snap => {
+        const arr = [];
+        snap.forEach(doc => arr.push(doc.data()));
+        renderTracks(arr);
+      });
+    }
+
+    function renderTracks(arr) {
+      document.getElementById("count").textContent = arr.length;
+      const el = document.getElementById("tracks");
+      el.innerHTML = "";
+      arr.forEach(t => {
+        const row = document.createElement("div");
+        row.className = "track";
+        row.innerHTML = `
+          <img class="cover" src="${t.artworkUrl || ''}" />
+          <div>
+            <div class="t-title">${t.title}</div>
+            <div class="t-artist">${t.artist} <span class="pill">+${t.addedBy}</span></div>
+          </div>
+        `;
+        el.appendChild(row);
+      });
+    }
+
+    // === Export CSV ===
+    async function exportCSV() {
+      const snap = await getDocs(collection(db, "playlists", PLAYLIST_ID, "tracks"));
+      const rows = [];
+      rows.push(["Title","Artist","ISRC","Album","DurationMS"]);
+      snap.forEach(doc => {
+        const t = doc.data();
+        rows.push([
+          t.title || "",
+          t.artist || "",
+          t.isrc || "",
+          t.album || "",
+          t.duration_ms || ""
+        ]);
+      });
+      const csv = rows.map(r => r.map(x => `"${String(x).replace(/"/g,'""')}"`).join(",")).join("\n");
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url; a.download = `${PLAYLIST_ID}.csv`; a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    // === Event listeners ===
+    document.getElementById("btnSearch").onclick = async () => {
+      const q = document.getElementById("q").value.trim();
+      if (!q) return;
+      document.getElementById("results").innerHTML = "<div class='muted'>Cerco…</div>";
+      try {
+        const res = await searchITunes(q);
+        renderResults(res);
+      } catch (e) {
+        document.getElementById("results").innerHTML = "<div class='muted'>Errore ricerca</div>";
+        console.error(e);
+      }
+    };
+    document.getElementById("btnExport").onclick = exportCSV;
+
+    // Avvia ascolto realtime
+    listenTracks();
+  </script>
+</body>
+</html>
