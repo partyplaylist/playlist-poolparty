@@ -48,8 +48,9 @@
   <script type="module">
     // === Firebase config (il tuo) ===
     import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-app.js";
-    import { 
-      getFirestore, collection, addDoc, query, orderBy, onSnapshot, getDocs, serverTimestamp, where, getDocs as getDocsQuery 
+    import {
+      getFirestore, collection, addDoc, query, orderBy, onSnapshot,
+      getDocs, serverTimestamp, where
     } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore.js";
 
     const firebaseConfig = {
@@ -63,6 +64,7 @@
 
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
+    console.log("init ok", app.name);
 
     const PLAYLIST_ID = "poolparty"; // ID playlist
 
@@ -70,8 +72,9 @@
     async function searchITunes(q) {
       const url = `https://itunes.apple.com/search?term=${encodeURIComponent(q)}&entity=song&limit=20`;
       const res = await fetch(url);
+      if (!res.ok) throw new Error("iTunes API error");
       const data = await res.json();
-      return data.results.map(r => ({
+      return (data.results || []).map(r => ({
         title: r.trackName,
         artist: r.artistName,
         album: r.collectionName,
@@ -90,7 +93,7 @@
         const row = document.createElement("div");
         row.className = "track";
         row.innerHTML = `
-          <img class="cover" src="${t.artworkUrl || ''}" />
+          <img class="cover" src="${t.artworkUrl || ''}" alt="">
           <div>
             <div class="t-title">${t.title}</div>
             <div class="t-artist">${t.artist}</div>
@@ -104,40 +107,52 @@
 
     async function addTrack(t) {
       const addedBy = document.getElementById("yourname").value.trim() || "ospite";
+      console.log("clic Aggiungi:", t.title, "—", t.artist);
 
-      // === Anti-duplicati: controlla se esiste già stesso title+artist ===
-      const qDup = query(
-        collection(db, "playlists", PLAYLIST_ID, "tracks"),
-        where("title", "==", t.title),
-        where("artist", "==", t.artist)
-      );
-      const dupSnap = await getDocsQuery(qDup);
-      if (!dupSnap.empty) {
-        alert("⚠️ Questo brano è già nella playlist!");
-        return;
+      try {
+        // Anti-duplicato (richiede indice composito title+artist)
+        const qDup = query(
+          collection(db, "playlists", PLAYLIST_ID, "tracks"),
+          where("title", "==", t.title),
+          where("artist", "==", t.artist)
+        );
+        const dupSnap = await getDocs(qDup);
+        if (!dupSnap.empty) {
+          alert("⚠️ Questo brano è già nella playlist!");
+          return;
+        }
+
+        await addDoc(collection(db, "playlists", PLAYLIST_ID, "tracks"), {
+          title: t.title,
+          artist: t.artist,
+          album: t.album || null,
+          duration_ms: t.duration_ms || null,
+          isrc: t.isrc || null,
+          artworkUrl: t.artworkUrl || null,
+          itunesId: t.itunesId || null,
+          addedBy,
+          addedAt: serverTimestamp()  // richiesto dalle regole
+        });
+
+        console.log("✅ Aggiunto:", t.title);
+      } catch (e) {
+        console.error("Errore addTrack:", e);
+        alert("Errore nell'aggiunta. Controlla la Console per dettagli.");
       }
-
-      // Aggiungi nuovo documento con serverTimestamp
-      await addDoc(collection(db, "playlists", PLAYLIST_ID, "tracks"), {
-        title: t.title,
-        artist: t.artist,
-        album: t.album || null,
-        duration_ms: t.duration_ms || null,
-        isrc: t.isrc || null,
-        artworkUrl: t.artworkUrl || null,
-        itunesId: t.itunesId || null,
-        addedBy,
-        addedAt: serverTimestamp()  // ✅ timestamp dal server
-      });
     }
 
     // === Lista realtime ===
     function listenTracks() {
-      const qTracks = query(collection(db, "playlists", PLAYLIST_ID, "tracks"), orderBy("addedAt", "asc"));
+      const qTracks = query(
+        collection(db, "playlists", PLAYLIST_ID, "tracks"),
+        orderBy("addedAt", "asc")
+      );
       onSnapshot(qTracks, snap => {
         const arr = [];
         snap.forEach(doc => arr.push(doc.data()));
         renderTracks(arr);
+      }, err => {
+        console.error("onSnapshot error:", err);
       });
     }
 
@@ -149,10 +164,10 @@
         const row = document.createElement("div");
         row.className = "track";
         row.innerHTML = `
-          <img class="cover" src="${t.artworkUrl || ''}" />
+          <img class="cover" src="${t.artworkUrl || ''}" alt="">
           <div>
             <div class="t-title">${t.title}</div>
-            <div class="t-artist">${t.artist} <span class="pill">+${t.addedBy}</span></div>
+            <div class="t-artist">${t.artist} <span class="pill">+${t.addedBy || "?"}</span></div>
           </div>
         `;
         el.appendChild(row);
@@ -161,25 +176,30 @@
 
     // === Export CSV ===
     async function exportCSV() {
-      const snap = await getDocs(collection(db, "playlists", PLAYLIST_ID, "tracks"));
-      const rows = [];
-      rows.push(["Title","Artist","ISRC","Album","DurationMS"]);
-      snap.forEach(doc => {
-        const t = doc.data();
-        rows.push([
-          t.title || "",
-          t.artist || "",
-          t.isrc || "",
-          t.album || "",
-          t.duration_ms || ""
-        ]);
-      });
-      const csv = rows.map(r => r.map(x => `"${String(x).replace(/"/g,'""')}"`).join(",")).join("\n");
-      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url; a.download = `${PLAYLIST_ID}.csv`; a.click();
-      URL.revokeObjectURL(url);
+      try {
+        const snap = await getDocs(collection(db, "playlists", PLAYLIST_ID, "tracks"));
+        const rows = [];
+        rows.push(["Title","Artist","ISRC","Album","DurationMS"]);
+        snap.forEach(doc => {
+          const t = doc.data();
+          rows.push([
+            t.title || "",
+            t.artist || "",
+            t.isrc || "",
+            t.album || "",
+            t.duration_ms || ""
+          ]);
+        });
+        const csv = rows.map(r => r.map(x => `"${String(x).replace(/"/g,'""')}"`).join(",")).join("\n");
+        const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url; a.download = `${PLAYLIST_ID}.csv`; a.click();
+        URL.revokeObjectURL(url);
+      } catch (e) {
+        console.error("Errore export CSV:", e);
+        alert("Errore export CSV (vedi Console).");
+      }
     }
 
     // === Event listeners ===
@@ -202,4 +222,3 @@
   </script>
 </body>
 </html>
-
