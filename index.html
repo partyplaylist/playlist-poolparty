@@ -5,42 +5,74 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Playlist Condivisa – Pool Party</title>
   <style>
-    body { font-family: system-ui, sans-serif; margin: 24px; background: #f9f9f9; }
-    h1 { margin-bottom: 4px; }
-    .muted { color: #666; font-size: 14px; margin-bottom: 16px; }
+    :root {
+      --gap: 24px;
+      --card-bg: #fff;
+      --bg: #f9f9f9;
+      --border: #e6e6e6;
+      --text: #222;
+      --muted: #666;
+    }
+    * { box-sizing: border-box; }
+    body { font-family: system-ui, sans-serif; margin: var(--gap); background: var(--bg); color: var(--text); }
+    h1 { margin: 0 0 4px 0; }
+    .muted { color: var(--muted); font-size: 14px; margin-bottom: 16px; }
+
+    /* Layout: mobile = 1 colonna; desktop = 2 colonne */
+    .layout { display: block; gap: var(--gap); }
+    @media (min-width: 960px) {
+      .layout { display: grid; grid-template-columns: 1fr 1fr; align-items: start; }
+    }
+
     input, button { padding: 8px 10px; font-size: 15px; }
-    input[type="text"] { width: 100%; max-width: 420px; }
+    input[type="text"] { width: 100%; max-width: 480px; }
     button { cursor: pointer; border: 1px solid #ccc; background: #fff; border-radius: 6px; }
     button:hover { background: #f0f0f0; }
-    .card { background: #fff; border-radius: 8px; padding: 16px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
-    .track { display: grid; grid-template-columns: 56px 1fr auto; gap: 12px; align-items: center; padding: 8px 0; border-bottom: 1px solid #eee; }
+    .spacer { height: 8px; }
+
+    .card { background: var(--card-bg); border-radius: 12px; padding: 16px; margin: 16px 0; box-shadow: 0 1px 3px rgba(0,0,0,0.08); border: 1px solid var(--border); }
+
+    .track { display: grid; grid-template-columns: 56px 1fr auto; gap: 12px; align-items: center; padding: 10px 0; border-bottom: 1px solid #eee; }
     .track:last-child { border-bottom: none; }
     .cover { width: 56px; height: 56px; border-radius: 8px; object-fit: cover; background: #f3f3f3; }
-    .t-title { font-weight: 600; }
+    .t-title { font-weight: 700; line-height: 1.2; }
     .t-artist { color: #444; font-size: 14px; }
     .pill { font-size: 11px; padding: 2px 6px; border-radius: 999px; background: #eee; margin-left: 6px; }
+
+    .section-title { display:flex; align-items:center; gap:8px; }
+    .section-title h3 { margin:0; }
   </style>
 </head>
 <body>
   <h1>Playlist Condivisa</h1>
   <div class="muted">Pool Party – aggiungi i tuoi brani preferiti 🎶</div>
 
-  <div class="card">
-    <h3>🔎 Cerca brani</h3>
-    <input id="q" type="text" placeholder="Cerca titolo o artista..." />
-    <input id="yourname" type="text" placeholder="Il tuo nome (facoltativo)" style="margin-top:8px;" />
-    <div style="margin-top:8px;">
-      <button id="btnSearch">Cerca</button>
+  <div class="layout">
+    <!-- Colonna sinistra: Ricerca / Aggiunta -->
+    <div>
+      <div class="card">
+        <div class="section-title"><h3>🔎 Cerca brani</h3></div>
+        <input id="q" type="text" placeholder="Cerca titolo o artista..." />
+        <div class="spacer"></div>
+        <input id="yourname" type="text" placeholder="Il tuo nome (facoltativo)" />
+        <div class="spacer"></div>
+        <button id="btnSearch">Cerca</button>
+        <div id="results"></div>
+      </div>
     </div>
-    <div id="results"></div>
-  </div>
 
-  <div class="card">
-    <h3>🎵 Tracce aggiunte <span id="count">0</span></h3>
-    <div class="muted">Si aggiorna in tempo reale</div>
-    <div id="tracks"></div>
-    <div style="margin-top:12px;">
-      <button id="btnExport">⬇️ Esporta CSV</button>
+    <!-- Colonna destra: Playlist live -->
+    <div>
+      <div class="card">
+        <div class="section-title">
+          <h3>🎵 Tracce aggiunte</h3>
+          <span class="pill" id="count">0</span>
+        </div>
+        <div class="muted">Si aggiorna in tempo reale</div>
+        <div id="tracks"></div>
+        <div class="spacer"></div>
+        <button id="btnExport">⬇️ Esporta CSV</button>
+      </div>
     </div>
   </div>
 
