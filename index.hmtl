@@ -48,8 +48,9 @@
   <script type="module">
     // === Firebase config (il tuo) ===
     import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-app.js";
-    import { getFirestore, collection, addDoc, query, orderBy, onSnapshot, getDocs } 
-      from "https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore.js";
+    import { 
+      getFirestore, collection, addDoc, query, orderBy, onSnapshot, getDocs, serverTimestamp, where, getDocs as getDocsQuery 
+    } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore.js";
 
     const firebaseConfig = {
       apiKey: "AIzaSyDdBiAvXAQS3yUiZYNGj57jnEeeNRazrqo",
@@ -63,7 +64,7 @@
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
 
-    const PLAYLIST_ID = "poolparty"; // ID playlist (puoi cambiarlo)
+    const PLAYLIST_ID = "poolparty"; // ID playlist
 
     // === Ricerca brani con iTunes ===
     async function searchITunes(q) {
@@ -103,6 +104,20 @@
 
     async function addTrack(t) {
       const addedBy = document.getElementById("yourname").value.trim() || "ospite";
+
+      // === Anti-duplicati: controlla se esiste già stesso title+artist ===
+      const qDup = query(
+        collection(db, "playlists", PLAYLIST_ID, "tracks"),
+        where("title", "==", t.title),
+        where("artist", "==", t.artist)
+      );
+      const dupSnap = await getDocsQuery(qDup);
+      if (!dupSnap.empty) {
+        alert("⚠️ Questo brano è già nella playlist!");
+        return;
+      }
+
+      // Aggiungi nuovo documento con serverTimestamp
       await addDoc(collection(db, "playlists", PLAYLIST_ID, "tracks"), {
         title: t.title,
         artist: t.artist,
@@ -112,7 +127,7 @@
         artworkUrl: t.artworkUrl || null,
         itunesId: t.itunesId || null,
         addedBy,
-        addedAt: new Date()
+        addedAt: serverTimestamp()  // ✅ timestamp dal server
       });
     }
 
@@ -187,3 +202,4 @@
   </script>
 </body>
 </html>
+
