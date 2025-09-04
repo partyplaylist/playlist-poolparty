@@ -44,7 +44,7 @@
   </style>
 </head>
 <body>
-  <h1>Playlist condivisa 🇦🇺</h1>
+  <h1>Playlist condivisa</h1>
   <div class="muted">Pool Party – Aggiungi i tuoi brani alla playlist</div>
 
   <div class="layout">
@@ -140,6 +140,8 @@
 
     async function addTrack(t) {
       const addedBy = document.getElementById("yourname").value.trim() || "ospite";
+      const qInput = document.getElementById("q");
+      const resultsEl = document.getElementById("results");
       console.log("clic Aggiungi:", t.title, "—", t.artist);
 
       try {
@@ -152,6 +154,10 @@
         const dupSnap = await getDocs(qDup);
         if (!dupSnap.empty) {
           alert("⚠️ Questo brano è già nella playlist!");
+          // Pulisci e focalizza comunque per flusso veloce
+          qInput.value = "";
+          resultsEl.innerHTML = "";
+          qInput.focus();
           return;
         }
 
@@ -164,10 +170,17 @@
           artworkUrl: t.artworkUrl || null,
           itunesId: t.itunesId || null,
           addedBy,
-          addedAt: serverTimestamp()  // richiesto dalle regole
+          addedAt: serverTimestamp()
         });
 
         console.log("✅ Aggiunto:", t.title);
+
+        // 👉 Dopo l'aggiunta: nascondi altri risultati e svuota il campo ricerca
+        qInput.value = "";
+        resultsEl.innerHTML = ""; // se preferisci, puoi mostrare un messaggio di conferma:
+        // resultsEl.innerHTML = `<div class="muted">Aggiunto: ${t.title} – ${t.artist}</div>`;
+        qInput.focus();
+
       } catch (e) {
         console.error("Errore addTrack:", e);
         alert("Errore nell'aggiunta. Controlla la Console per dettagli.");
@@ -236,7 +249,13 @@
     }
 
     // === Event listeners ===
-    document.getElementById("btnSearch").onclick = async () => {
+    document.getElementById("btnSearch").onclick = doSearch;
+    document.getElementById("q").addEventListener("keydown", (e) => {
+      if (e.key === "Enter") doSearch();
+    });
+    document.getElementById("btnExport").onclick = exportCSV;
+
+    async function doSearch() {
       const q = document.getElementById("q").value.trim();
       if (!q) return;
       document.getElementById("results").innerHTML = "<div class='muted'>Cerco…</div>";
@@ -247,8 +266,7 @@
         document.getElementById("results").innerHTML = "<div class='muted'>Errore ricerca</div>";
         console.error(e);
       }
-    };
-    document.getElementById("btnExport").onclick = exportCSV;
+    }
 
     // Avvia ascolto realtime
     listenTracks();
